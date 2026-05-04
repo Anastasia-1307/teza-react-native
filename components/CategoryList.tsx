@@ -26,7 +26,7 @@ export default function CategoryList({ onCategorySelect, refreshTrigger }: Categ
       
       const token = await SecureStore.getItemAsync('access_token');
       if (!token) {
-        setError('Nu ești autentificat');
+        setError('Nu sunteți autentificat');
         return;
       }
 
@@ -62,7 +62,7 @@ export default function CategoryList({ onCategorySelect, refreshTrigger }: Categ
   const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
     Alert.alert(
       'Ștergere categorie',
-      `Ești sigur că vrei să ștergi categoria "${categoryName}"?`,
+      `Sunteți sigur că doriți să ștergeți categoria "${categoryName}"?`,
       [
         { text: 'Anulează', style: 'cancel' },
         {
