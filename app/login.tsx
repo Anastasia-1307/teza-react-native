@@ -177,25 +177,35 @@ export default function LoginPage() {
             // Verificăm dacă există username-uri cu spații (le curățăm)
             const spaceUsers = biometricUsers.filter(user => user.includes(' '));
             
-            if (uuidUsers.length > 0) {
-                console.log('Found UUID users to clean up:', uuidUsers);
-                
-                for (const uuidUser of uuidUsers) {
-                    await BiometricStorage.deleteBiometricData(uuidUser);
-                    console.log(`Cleaned up UUID user: ${uuidUser}`);
+            // Ștergem și utilizatorii fără cheie AES validă
+            const invalidUsers = [];
+            for (const user of biometricUsers) {
+                try {
+                    const status = await BiometricStorage.getBiometricStatus(user);
+                    if (status.enabled) {
+                        // Verificăm dacă există cheia AES
+                        const keys = { aesKey: `bio_aes_key_${user}` };
+                        const aesKey = await SecureStore.getItemAsync(keys.aesKey);
+                        if (!aesKey) {
+                            invalidUsers.push(user);
+                        }
+                    }
+                } catch (error) {
+                    invalidUsers.push(user);
                 }
             }
             
-            if (spaceUsers.length > 0) {
-                console.log('Found users with spaces to clean up:', spaceUsers);
+            const allUsersToDelete = [...uuidUsers, ...spaceUsers, ...invalidUsers];
+            
+            if (allUsersToDelete.length > 0) {
+                console.log('Found invalid users to clean up:', allUsersToDelete);
                 
-                for (const spaceUser of spaceUsers) {
-                    await BiometricStorage.deleteBiometricData(spaceUser);
-                    console.log(`Cleaned up space user: ${spaceUser}`);
+                for (const user of allUsersToDelete) {
+                    await BiometricStorage.deleteBiometricData(user);
+                    console.log(`Cleaned up invalid user: ${user}`);
                 }
             }
-            
-            if (uuidUsers.length > 0 || spaceUsers.length > 0) {
+            if (allUsersToDelete.length > 0) {
                 console.log('Biometric data cleanup complete!');
             } else {
                 console.log('No invalid users found, data is clean');
@@ -204,7 +214,6 @@ export default function LoginPage() {
             console.error('Error cleaning up biometric data:', error);
         }
     };
-
     // Calculează delay-ul în funcție de numărul de încercări eșuate
     const getDelayForFailedAttempts = (attempts: number): number => {
         if (attempts <= 5) return 0; // Fără pauză pentru primele 5 încercări
@@ -266,12 +275,11 @@ export default function LoginPage() {
     };
 
     useEffect(() => {
-        // Verificăm din nou când se schimbă username-ul - doar pentru debugging
+    
         if (username.length > 0) {
             console.log('Username changed:', username);
         }
-        // Nu mai verificăm biometric la schimbarea username-ului
-        // Butonul biometric e independent de form
+  
     }, [username]);
 
     const checkBiometricAvailability = async () => {
@@ -317,10 +325,7 @@ export default function LoginPage() {
                 finalCondition: hasHardware && isEnrolled && hasValidBiometricData
             });
             
-            // Show biometric button dac:
-            // 1. Hardware supports biometrics and user is enrolled
-            // 2. Exist cel puin un utilizator cu biometric activat i date valide
-            // 3. Nu mai depindem de username-ul din form
+         
             if (hasHardware && isEnrolled && hasValidBiometricData) {
                 setShowBioButton(true);
                 console.log('Biometric button should show - system ready');
@@ -341,25 +346,29 @@ export default function LoginPage() {
 
    const handleBiometricAuth = async () => {
     try {
-        const lastUser = await SecureStore.getItemAsync('last_logged_user');
-
-        if (!lastUser) {
-            setError('Nu există utilizator salvat. Autentifică-te cu parola.');
+        // Obține lista de utilizatori cu biometric activat
+        const biometricUsers = await BiometricStorage.getBiometricUsersList();
+        
+        if (biometricUsers.length === 0) {
+            setError('Nu există utilizatori cu autentificare biometrică configurată.');
             return;
         }
+        
+        
+        const targetUsername = biometricUsers[0];
+        
+        console.log('Attempting biometric auth...');
 
-        console.log('Using last logged user:', lastUser);
-
-        // Use legacy biometric authentication only
+        // Autentificare biometrică
         const result = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Autentificare biometrică',
+            promptMessage: `Autentificare biometrică`,
             cancelLabel: 'Anulează',
             fallbackLabel: 'Folosește parola',
         });
 
         if (result.success) {
-            console.log(`Biometric auth successful for ${lastUser}`);
-            await performBiometricLogin(lastUser);
+            console.log('Biometric auth successful');
+            await performBiometricLogin(targetUsername);
         }
 
     } catch (error) {
@@ -382,7 +391,7 @@ const performBiometricLogin = async (targetUsername: string) => {
             return;
         }
 
-        console.log('Biometric login for:', bioStatus.username);
+        console.log('Performing biometric login...');
         
         // Decriptează parola cu cheia AES biometrică
         const password = await BiometricStorage.decryptPasswordWithBiometricKey(targetUsername);
@@ -393,27 +402,20 @@ const performBiometricLogin = async (targetUsername: string) => {
         }
 
         const loginData = {
-            username: bioStatus.username,
+            username: targetUsername,
             password: password,
             grant_type: "password"
         };
-
+        
         const baseUrl = await NetworkConfig.getBaseUrl();
 
-        const response = await new Promise<any>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', `${baseUrl}/auth`);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-
-            xhr.onload = () => {
-                resolve({
-                    ok: xhr.status === 200,
-                    json: () => Promise.resolve(JSON.parse(xhr.responseText))
-                });
-            };
-
-            xhr.onerror = () => reject(new Error('Network request failed'));
-            xhr.send(JSON.stringify(loginData));
+        // Folosim noul endpoint pentru autentificare directă biometrică
+        const response = await fetch(`${baseUrl}/auth/biometric/direct`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(loginData),
         });
 
         const data = await response.json();
@@ -421,12 +423,13 @@ const performBiometricLogin = async (targetUsername: string) => {
         if (response.ok) {
             await SecureStore.setItemAsync('access_token', data.access_token);
             await SecureStore.setItemAsync('refresh_token', data.refresh_token);
+            
+            // Stochează persistent refresh token pentru biometric
+            if (data.persistent_refresh_token) {
+                await SecureStore.setItemAsync('persistent_refresh_token', data.persistent_refresh_token);
+            }
 
-            // Log biometric login
-            await Logger.logUserEvent(bioStatus.username, 'login_bio', {
-                login_method: 'biometric_aes',
-                timestamp: new Date().toISOString()
-            });
+            await SecureStore.setItemAsync('last_logged_user', bioStatus.username);
 
             const tokenPayload = JSON.parse(atob(data.access_token.split('.')[1]));
             const userRole = tokenPayload.role;
@@ -467,69 +470,54 @@ const performBiometricLogin = async (targetUsername: string) => {
             const loginData = {
                 username: username.trim(),
                 password: password.trim(),
-                grant_type: "password"
+                grant_type: "password",
+                
             };
 
             const baseUrl = await NetworkConfig.getBaseUrl();
-            // Try XMLHttpRequest as fallback
-            const response = await new Promise<any>((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', `${baseUrl}/auth`);
-                xhr.setRequestHeader('Content-Type', 'application/json');
-                xhr.onload = () => {
-                    if (xhr.status === 200) {
-                        resolve({
-                            ok: true,
-                            json: () => Promise.resolve(JSON.parse(xhr.responseText))
-                        });
-                    } else {
-                        resolve({
-                            ok: false,
-                            json: () => Promise.resolve(JSON.parse(xhr.responseText))
-                        });
-                    }
-                };
-                xhr.onerror = () => reject(new Error('Network request failed'));
-                xhr.send(JSON.stringify(loginData));
+            // Use fetch API
+            const response = await fetch(`${baseUrl}/auth`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(loginData),
             });
-
             const data = await response.json();
-
             if (response.ok) {
                 // Reset failed attempts on successful login
                 setFailedAttempts(0);
                 setLastAttemptTime(null);
                 setIsBlocked(false);
                 setBlockTimeRemaining(0);
-                
                 // Store tokens using SecureStore for maximum security
                 await SecureStore.setItemAsync('access_token', data.access_token);
                 await SecureStore.setItemAsync('refresh_token', data.refresh_token);
-                
+                // Stochează persistent refresh token dacă există
+                if (data.persistent_refresh_token) {
+                    await SecureStore.setItemAsync('persistent_refresh_token', data.persistent_refresh_token);}
                 // Save password temporarily for biometric setup
                 await SecureStore.setItemAsync('user_password', password);
-                
-                // Log regular login
-                await Logger.logUserEvent(username.trim(), 'login', {
-                    login_method: 'password',
-                    timestamp: new Date().toISOString()
-                });
-                
                 // Save credentials for biometric authentication if enabled for this user
                 const trimmedUsername = username.trim();
                 const hasExistingBiometricData = await BiometricStorage.hasBiometricData(trimmedUsername);
                 await SecureStore.setItemAsync('last_logged_user', trimmedUsername);
               const tokenPayload = JSON.parse(atob(data.access_token.split('.')[1]));
               const userRole = tokenPayload.role;
-
                await SecureStore.setItemAsync('last_logged_user', trimmedUsername);
 
       
 
-                if (userRole !== 'admin' && hasExistingBiometricData) {
-                        // Folosește noua metodă cu chei AES
-                        await BiometricStorage.generateAndSaveBiometricKey(trimmedUsername);
-                        await BiometricStorage.encryptPasswordWithBiometricKey(trimmedUsername, password);
+                if (userRole !== 'admin') {
+                        // Set up biometric authentication for all non-admin users
+                        try {
+                            await BiometricStorage.generateAndSaveBiometricKey(trimmedUsername);
+                            await BiometricStorage.encryptPasswordWithBiometricKey(trimmedUsername, password);
+                            console.log('Biometric authentication set up successfully for:', trimmedUsername);
+                        } catch (bioError) {
+                            console.error('Failed to set up biometric authentication:', bioError);
+                            // Continue with login even if biometric setup fails
+                        }
                         }
                 console.log('Checking biometric save:', {
                     username: trimmedUsername,

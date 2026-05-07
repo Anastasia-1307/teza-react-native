@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { createDrawerNavigator, DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
+import { createDrawerNavigator, DrawerContentComponentProps, DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import React from 'react';
@@ -30,7 +30,7 @@ const MenuButton = ({ onPress }: { onPress: () => void }) => (
   </TouchableOpacity>
 );
 
-const CustomDrawerContent = (props: any) => {
+const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const navigation = useNavigation<CustomNavigationProp>();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 

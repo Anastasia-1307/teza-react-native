@@ -35,35 +35,15 @@ export class Logger {
 
       console.log('Log data to send:', logData);
 
-      const response = await new Promise<ApiResponse>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${baseUrl}/user-logs`);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        
-        xhr.onload = () => {
-          console.log('Response status:', xhr.status);
-          console.log('Response text:', xhr.responseText);
-          
-          if (xhr.status === 200 || xhr.status === 201) {
-            resolve({
-              ok: true,
-              json: () => Promise.resolve(JSON.parse(xhr.responseText))
-            });
-          } else {
-            resolve({
-              ok: false,
-              json: () => Promise.resolve(JSON.parse(xhr.responseText))
-            });
-          }
-        };
-        
-        xhr.onerror = (error) => {
-          console.error('Network error:', error);
-          reject(new Error('Network request failed'));
-        };
-        
-        xhr.send(JSON.stringify(logData));
+      const response = await fetch(`${baseUrl}/user-logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(logData),
       });
+
+      console.log('Response status:', response.status);
 
       if (response.ok) {
         console.log(`User event logged: ${eventType} for ${username}`);

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { createDrawerNavigator, DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
+import { createDrawerNavigator, DrawerContentComponentProps, DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import React from 'react';
@@ -7,10 +7,10 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddCategory from './AddCategory';
 import AddPassword from './AddPassword';
 import AdminContent from './AdminContent';
+import AdminIPManagement from './AdminIPManagement';
 import AdminLogs from './AdminLogs';
 import AdminUsers from './AdminUsers';
 import PasswordGenerator from './PasswordGenerator';
-import AdminIPManagement from './AdminIPManagement';
 
 // @ts-ignore - NetworkConfig is JS file
 import { NetworkConfig } from '../utils/NetworkConfig';
@@ -34,7 +34,7 @@ const MenuButton = ({ onPress }: { onPress: () => void }) => (
   </TouchableOpacity>
 );
 
-const CustomDrawerContent = (props: any) => {
+const CustomDrawerContent = (props: DrawerContentComponentProps) => {
   const navigation = useNavigation<CustomNavigationProp>();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
@@ -133,7 +133,6 @@ const CustomDrawerContent = (props: any) => {
     } else {
       console.log('Logout completed locally only (server unavailable)');
     }
-    
     setIsLoggingOut(false);
   };
 

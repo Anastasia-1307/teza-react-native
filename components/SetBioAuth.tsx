@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BiometricStorage } from '../utils/BiometricStorage';
 import { Logger } from '../utils/Logger';
@@ -18,6 +19,7 @@ const styles = StyleSheet.create({
 });
 
 export default function SetBioAuth() {
+  const router = useRouter();
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isBioEnabled, setIsBioEnabled] = useState(false);
@@ -41,7 +43,6 @@ export default function SetBioAuth() {
       setIsSupported(false);
     }
   };
-
   // Verificăm dacă userul curent are biometric activ
   const checkBioAuthStatus = async () => {
     try {
@@ -72,39 +73,44 @@ export default function SetBioAuth() {
         Alert.alert('Eroare', 'Nu s-a putut obține utilizatorul curent.');
         return;
       }
-
-      // Get user password for biometric storage
-      const password = await SecureStore.getItemAsync('user_password');
-      if (!password) {
-        Alert.alert('Eroare', 'Parola nu este disponibilă. Te rugăm să te re-autentifici.');
-        return;
-      }
-
+      // Check if biometric data already exists
+      const hasExistingData = await BiometricStorage.hasBiometricData(currentUsername);
       const authResult = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Autentifică-te pentru a activa autentificarea biometrică',
+        promptMessage: 'Verifică identitatea pentru a confirma autentificarea biometrică',
         cancelLabel: 'Anulează',
         fallbackLabel: 'Folosește parola',
       });
-
       if (!authResult.success) {
-        Alert.alert('Eroare', 'Autentificarea biometrică a eșuat.');
+        Alert.alert('Eroare', 'Verificarea biometrică a eșuat.');
         return;
       }
 
-      // 1. Generează cheie AES biometrică
-      await BiometricStorage.generateAndSaveBiometricKey(currentUsername);
-      
-      // 2. Criptează parola cu cheia AES biometrică
-      await BiometricStorage.encryptPasswordWithBiometricKey(currentUsername, password);
-      
-      // 3. Logează activarea autentificării biometrice
-      await Logger.logUserEvent(currentUsername, 'set_bio_auth', {
-        bio_method: 'aes_key',
-        timestamp: new Date().toISOString()
-      });
-      
-      setIsBioEnabled(true);
-      Alert.alert('Succes', `Autentificarea biometrică cu chei AES a fost activată pentru ${currentUsername}.`);
+      if (hasExistingData) {
+        // Biometric data is already configured, just confirm it's working
+        await Logger.logUserEvent(currentUsername, 'confirm_bio_auth', {
+          bio_method: 'aes_key',
+          timestamp: new Date().toISOString()
+        });
+        
+        setIsBioEnabled(true);
+        Alert.alert('Succes', `Autentificarea biometrică este activată pentru ${currentUsername}.`);
+      } else {
+        // This shouldn't happen with the new login flow, but handle it gracefully
+        Alert.alert(
+          'Date biometrice indisponibile',
+          'Nu am putut accesa datele biometrice. Pentru a le reconfigura, deconectați-vă și autentificați-vă din nou folosind parola.',
+          [
+            { text: 'Mai târziu',
+              style: 'cancel' },
+            {
+              text: 'Deloghează-mă',
+              onPress: () => {
+                router.replace('/login');
+              }
+            }
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error enabling biometric auth:', error);
       Alert.alert('Eroare', 'Nu s-a putut activa autentificarea biometrică.');
@@ -118,7 +124,6 @@ export default function SetBioAuth() {
     console.log('Starting disableBiometricAuth...');
     console.log('Current username:', currentUsername);
     console.log('Is bio enabled:', isBioEnabled);
-    
     setIsLoading(true);
     try {
       if (!currentUsername) {
@@ -126,36 +131,20 @@ export default function SetBioAuth() {
         Alert.alert('Eroare', 'Nu s-a putut identifica utilizatorul curent. Te rugăm să te re-autentifici.');
         return;
       }
-
       console.log('Requesting biometric authentication...');
       const authResult = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Verifică identitatea pentru a dezactiva autentificarea biometrică',
         cancelLabel: 'Anulează',
         fallbackLabel: 'Folosește parola',
       });
-
       if (!authResult.success) {
         console.log('Biometric authentication failed or cancelled');
         Alert.alert('Eroare', 'Verificarea biometrică a eșuat sau a fost anulată.');
         return;
       }
-
       console.log('Biometric authentication successful');
       console.log('Deleting biometric data for:', currentUsername);
-
       await BiometricStorage.deleteBiometricData(currentUsername);
-      
-      // Logează dezactivarea autentificării biometrice (non-blocking)
-      try {
-        await Logger.logUserEvent(currentUsername, 'disable_bio_auth', {
-          bio_method: 'aes_key',
-          timestamp: new Date().toISOString()
-        });
-        console.log('Bio auth disable logged successfully');
-      } catch (logError) {
-        console.error('Failed to log bio auth disable:', logError);
-        // Continuăm chiar dacă logging-ul eșuează
-      }
       
       setIsBioEnabled(false);
       console.log('Biometric authentication disabled successfully');

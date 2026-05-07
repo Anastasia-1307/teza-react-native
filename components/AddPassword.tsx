@@ -351,7 +351,7 @@ export default function AddPassword() {
               <Text style={styles.buttonText}>Salvează</Text>
             )}
           </TouchableOpacity>
-          <View style={{ height: 30 }} />
+          <View style={{ height: 50 }} />
        {/* Passwords List Section */}
 <View style={styles.passwordsSection}>
   <Text style={styles.passwordsHeader}>Parolele tale</Text>
