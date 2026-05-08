@@ -509,11 +509,16 @@ const performBiometricLogin = async (targetUsername: string) => {
       
 
                 if (userRole !== 'admin') {
-                        // Set up biometric authentication for all non-admin users
+                        // Set up biometric authentication for all non-admin users, ONLY if they haven't explicitly disabled it
                         try {
-                            await BiometricStorage.generateAndSaveBiometricKey(trimmedUsername);
-                            await BiometricStorage.encryptPasswordWithBiometricKey(trimmedUsername, password);
-                            console.log('Biometric authentication set up successfully for:', trimmedUsername);
+                            const hasDisabled = await BiometricStorage.hasUserDisabledBiometric(trimmedUsername);
+                            if (!hasDisabled) {
+                                await BiometricStorage.generateAndSaveBiometricKey(trimmedUsername);
+                                await BiometricStorage.encryptPasswordWithBiometricKey(trimmedUsername, password);
+                                console.log('Biometric authentication set up successfully for:', trimmedUsername);
+                            } else {
+                                console.log('User has explicitly disabled biometric, skipping auto-setup:', trimmedUsername);
+                            }
                         } catch (bioError) {
                             console.error('Failed to set up biometric authentication:', bioError);
                             // Continue with login even if biometric setup fails

@@ -80,6 +80,12 @@ export default function AdminUsers() {
             console.log(`Deleting biometric data for ${username} - promoted to admin`);
             await BiometricStorage.deleteBiometricData(username);
             console.log(`Biometric data successfully deleted for ${username}`);
+            
+            // Notify server to revoke persistent refresh tokens
+            await Logger.logUserEvent(username, 'disable_bio_auth', {
+              bio_method: 'aes_key',
+              timestamp: new Date().toISOString()
+            });
           } catch (bioError) {
             console.error('Error deleting biometric data:', bioError);
             // Continuam chiar daca stergerea datelor biometrice esueaza

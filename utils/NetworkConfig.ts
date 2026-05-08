@@ -51,8 +51,9 @@ export class NetworkConfig {
   
   // Metoda veche pentru compatibilitate
   static async findWorkingServer(): Promise<string> {
-    const POSSIBLE_IPS = [
-    
+     const POSSIBLE_IPS = [
+      'http://localhost:8000',
+      'http://127.0.0.1:8000',
     ];
     
     for (const url of POSSIBLE_IPS) {

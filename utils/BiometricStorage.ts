@@ -6,7 +6,8 @@ const getUserBiometricKeys = (username: string) => ({
   enabled: `biometric_enabled_${username}`,
   username: `bio_username_${username}`,
   aesKey: `bio_aes_key_${username}`,
-  keychainService: `biometric_${username}`
+  keychainService: `biometric_${username}`,
+  userDisabled: `biometric_user_disabled_${username}` // Flag pentru când utilizatorul dezactivează explicit
 });
 
 // Chei globale pentru a ține evidența utilizatorilor cu biometric
@@ -209,6 +210,9 @@ export class BiometricStorage {
       // Eliminăm utilizatorul din lista globală
       await this.removeUserFromBiometricList(username);
 
+      // Marchează că utilizatorul a dezactivat explicit biometricul
+      await SecureStore.setItemAsync(keys.userDisabled, 'true');
+
       console.log(`Biometric data deleted for user: ${username}`);
     } catch (error) {
       console.error('Error deleting biometric data:', error);
@@ -267,6 +271,28 @@ export class BiometricStorage {
     } catch (error) {
       console.error('Error checking biometric status for user:', error);
       return false;
+    }
+  }
+
+  // Verifică dacă utilizatorul a dezactivat explicit biometricul
+  static async hasUserDisabledBiometric(username: string): Promise<boolean> {
+    try {
+      const keys = getUserBiometricKeys(username);
+      const disabled = await SecureStore.getItemAsync(keys.userDisabled);
+      return disabled === 'true';
+    } catch (error) {
+      console.error('Error checking if user disabled biometric:', error);
+      return false;
+    }
+  }
+
+  // Resetează flag-ul de dezactivare când utilizatorul re-activează biometricul
+  static async clearUserDisabledFlag(username: string) {
+    try {
+      const keys = getUserBiometricKeys(username);
+      await SecureStore.deleteItemAsync(keys.userDisabled);
+    } catch (error) {
+      console.error('Error clearing user disabled flag:', error);
     }
   }
   
