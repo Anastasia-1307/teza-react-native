@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // @ts-ignore - NetworkConfig is JS file
 import { BiometricStorage } from '../utils/BiometricStorage';
+import { Logger } from '../utils/Logger';
 import { NetworkConfig } from '../utils/NetworkConfig';
 
 interface User {
@@ -74,6 +75,8 @@ export default function AdminUsers() {
       });
 
       if (response.ok) {
+        const responseData = await response.json();
+        
         // Daca utilizatorul este promovat la admin, sterge datele biometrice
         if (newRole === 'admin' && username) {
           try {
@@ -92,7 +95,7 @@ export default function AdminUsers() {
           }
         }
         
-        Alert.alert('Succes', 'Rolul utilizatorului a fost actualizat');
+        Alert.alert('Succes', responseData.message || 'Rolul utilizatorului a fost actualizat. Utilizatorul trebuie să se reautentifice pentru a vedea modificările.');
         fetchUsers();
         setRoleModalVisible(false);
         setSelectedUser(null);

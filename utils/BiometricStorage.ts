@@ -31,7 +31,9 @@ export class BiometricStorage {
         .join('');
       
       // 2. Stochează cheia AES în SecureStore (cu biometric verification la acces)
-      await SecureStore.setItemAsync(keys.aesKey, aesKeyHex);
+      await SecureStore.setItemAsync(keys.aesKey, aesKeyHex, {
+        keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY
+      });
       
       // 3. Marchează biometric ca activat în SecureStore
       await SecureStore.setItemAsync(keys.enabled, 'true');
@@ -54,10 +56,16 @@ export class BiometricStorage {
       const keys = getUserBiometricKeys(username);
       
       // Obține cheia AES din SecureStore (biometric verification se face la nivel de UI)
-      const aesKeyHex = await SecureStore.getItemAsync(keys.aesKey);
+      let aesKeyHex: string | null;
+      try {
+        aesKeyHex = await SecureStore.getItemAsync(keys.aesKey);
+      } catch (accessError) {
+        console.error('Error accessing biometric key (may require re-auth):', accessError);
+        throw new Error('Autentificarea biometrică este necesară pentru a accesa cheia.');
+      }
       
       if (!aesKeyHex) {
-        throw new Error('Biometric key not found or authentication failed');
+        throw new Error('Biometric key not found. Te rugăm să te autentifici cu parola.');
       }
       const aesKeyBytes = new Uint8Array(32);
       for (let i = 0; i < 32; i++) {
@@ -99,11 +107,17 @@ export class BiometricStorage {
     try {
       const keys = getUserBiometricKeys(username);
       
-      // Obține cheia AES din SecureStore
-      const aesKeyHex = await SecureStore.getItemAsync(keys.aesKey);
+      // Obține cheia AES din SecureStore (sistemul va solicita autentificare biometrică automat)
+      let aesKeyHex: string | null;
+      try {
+        aesKeyHex = await SecureStore.getItemAsync(keys.aesKey);
+      } catch (accessError) {
+        console.error('Error accessing biometric key (may require re-auth):', accessError);
+        throw new Error('Autentificarea biometrică este necesară pentru a accesa cheia. Încearcă din nou.');
+      }
       
       if (!aesKeyHex) {
-        throw new Error('Biometric key not found or authentication failed');
+        throw new Error('Biometric key not found. Te rugăm să te autentifici cu parola.');
       }
       const aesKeyBytes = new Uint8Array(32);
       for (let i = 0; i < 32; i++) {

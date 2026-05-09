@@ -158,62 +158,9 @@ export default function LoginPage() {
     useEffect(() => {
         console.log('useEffect triggered - checking biometric availability...');
         
-        // Curățăm datele biometrice vechi cu UUID-uri
-        cleanupBiometricData();
-        
         checkBiometricAvailability();
     }, []); // Rulăm doar la încărcare
 
-    // Funcție de curățare a datelor biometrice vechi
-    const cleanupBiometricData = async () => {
-        try {
-            console.log('Cleaning up biometric data...');
-            const biometricUsers = await BiometricStorage.getBiometricUsersList();
-            
-            // Verificăm dacă există UUID-uri în listă (le curățăm)
-            const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            const uuidUsers = biometricUsers.filter(user => uuidPattern.test(user));
-            
-            // Verificăm dacă există username-uri cu spații (le curățăm)
-            const spaceUsers = biometricUsers.filter(user => user.includes(' '));
-            
-            // Ștergem și utilizatorii fără cheie AES validă
-            const invalidUsers = [];
-            for (const user of biometricUsers) {
-                try {
-                    const status = await BiometricStorage.getBiometricStatus(user);
-                    if (status.enabled) {
-                        // Verificăm dacă există cheia AES
-                        const keys = { aesKey: `bio_aes_key_${user}` };
-                        const aesKey = await SecureStore.getItemAsync(keys.aesKey);
-                        if (!aesKey) {
-                            invalidUsers.push(user);
-                        }
-                    }
-                } catch (error) {
-                    invalidUsers.push(user);
-                }
-            }
-            
-            const allUsersToDelete = [...uuidUsers, ...spaceUsers, ...invalidUsers];
-            
-            if (allUsersToDelete.length > 0) {
-                console.log('Found invalid users to clean up:', allUsersToDelete);
-                
-                for (const user of allUsersToDelete) {
-                    await BiometricStorage.deleteBiometricData(user);
-                    console.log(`Cleaned up invalid user: ${user}`);
-                }
-            }
-            if (allUsersToDelete.length > 0) {
-                console.log('Biometric data cleanup complete!');
-            } else {
-                console.log('No invalid users found, data is clean');
-            }
-        } catch (error) {
-            console.error('Error cleaning up biometric data:', error);
-        }
-    };
     // Calculează delay-ul în funcție de numărul de încercări eșuate
     const getDelayForFailedAttempts = (attempts: number): number => {
         if (attempts <= 5) return 0; // Fără pauză pentru primele 5 încercări
@@ -237,11 +184,9 @@ export default function LoginPage() {
 
             const elapsed = Date.now() - lastAttemptTime;
             const remaining = Math.max(0, delay - elapsed);
-
             if (remaining > 0) {
                 setIsBlocked(true);
                 setBlockTimeRemaining(remaining);
-
                 const timer = setInterval(() => {
                     const newElapsed = Date.now() - lastAttemptTime;
                     const newRemaining = Math.max(0, delay - newElapsed);
@@ -286,28 +231,37 @@ export default function LoginPage() {
         try {
             const hasHardware = await LocalAuthentication.hasHardwareAsync();
             const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-            
-            // Verificăm dacă există ORICE utilizator cu biometric activat
-            // Nu mai depindem de username-ul din form
             const biometricUsers = await BiometricStorage.getBiometricUsersList();
             console.log('Raw biometricUsers result:', biometricUsers, 'Type:', typeof biometricUsers, 'Length:', biometricUsers.length);
             const hasBiometricUsers = biometricUsers.length > 0;
-            
             // Verificăm dacă există date biometrice valide pentru oricare utilizator
             let hasValidBiometricData = false;
+            let hasValidServerToken = false;
             if (hasBiometricUsers) {
-                console.log('Checking biometric status for users:', biometricUsers);
-                
                 // Verificăm fiecare utilizator din listă
                 for (const user of biometricUsers) {
                     try {
                         console.log(`Checking user: ${user}`);
                         const bioStatus = await BiometricStorage.getBiometricStatus(user);
                         console.log(`Status for ${user}:`, bioStatus);
-                        
                         if (bioStatus.enabled) {
                             hasValidBiometricData = true;
                             console.log(`Found valid biometric data for user: ${user}`);
+                            // Verificăm și starea token-ului persistent din baza de date
+                            try {
+                                const baseUrl = await NetworkConfig.getBaseUrl();
+                                const response = await fetch(`${baseUrl}/auth/biometric/status/${user}`);
+                                const data = await response.json();
+                                if (data.biometric_available) {
+                                    hasValidServerToken = true;
+                                    console.log(`User ${user} has valid persistent token`);
+                                } else {
+                                    await BiometricStorage.deleteBiometricData(user);
+                                }
+                            } catch (serverError) {
+                                console.error(`Error checking server status for ${user}:`, serverError);
+                            }
+                            
                             break;
                         }
                     } catch (error) {
@@ -322,11 +276,12 @@ export default function LoginPage() {
                 biometricUsersCount: biometricUsers.length,
                 biometricUsers: biometricUsers,
                 hasValidBiometricData,
-                finalCondition: hasHardware && isEnrolled && hasValidBiometricData
+                hasValidServerToken,
+                finalCondition: hasHardware && isEnrolled && hasValidBiometricData && hasValidServerToken
             });
             
          
-            if (hasHardware && isEnrolled && hasValidBiometricData) {
+            if (hasHardware && isEnrolled && hasValidBiometricData && hasValidServerToken) {
                 setShowBioButton(true);
                 console.log('Biometric button should show - system ready');
             } else {
@@ -335,7 +290,8 @@ export default function LoginPage() {
                     hardware: hasHardware,
                     enrolled: isEnrolled,
                     hasBiometricUsers: hasBiometricUsers,
-                    hasValidBiometricData
+                    hasValidBiometricData,
+                    hasValidServerToken
                 });
             }
         } catch (error) {
@@ -353,8 +309,6 @@ export default function LoginPage() {
             setError('Nu există utilizatori cu autentificare biometrică configurată.');
             return;
         }
-        
-        
         const targetUsername = biometricUsers[0];
         
         console.log('Attempting biometric auth...');
@@ -371,9 +325,13 @@ export default function LoginPage() {
             await performBiometricLogin(targetUsername);
         }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Biometric auth error:', error);
-        setError('Autentificarea biometrică a eșuat.');
+        if (error.message && error.message.includes('Autentificarea biometrică este necesară')) {
+            setError('Datele biometrice trebuie reconfigurate. Te rugăm să te autentifici cu parola.');
+        } else {
+            setError('Autentificarea biometrică a eșuat.');
+        }
     }
 };
 
@@ -381,26 +339,33 @@ export default function LoginPage() {
 const performBiometricLogin = async (targetUsername: string) => {
     setIsLoading(true);
     setError("");
-
     try {
         // Verificăm statusul biometric
         const bioStatus = await BiometricStorage.getBiometricStatus(targetUsername);
-        
         if (!bioStatus.enabled) {
             setError('Autentificarea biometrică nu este activată pentru acest utilizator.');
             return;
         }
-
         console.log('Performing biometric login...');
-        
         // Decriptează parola cu cheia AES biometrică
-        const password = await BiometricStorage.decryptPasswordWithBiometricKey(targetUsername);
-        
+        let password: string;
+        try {
+            password = await BiometricStorage.decryptPasswordWithBiometricKey(targetUsername);
+        } catch (decryptError: any) {
+            console.error('Decrypt error:', decryptError);
+            if (decryptError.message && (decryptError.message.includes('Autentificarea biometrică este necesară') || 
+            decryptError.message.includes('Biometric key not found'))) {
+            setError('Datele biometrice trebuie reconfigurate. Te rugăm să te autentifici cu parola.');
+                // Ștergem datele biometrice vechi pentru a forța reconfigurarea
+                await BiometricStorage.deleteBiometricData(targetUsername);
+            } else {
+                setError('Nu s-a putut decripta parola. Loghează-te cu parola.'); }
+            return;
+        }
         if (!password) {
             setError('Nu s-a putut decripta parola. Loghează-te cu parola.');
             return;
         }
-
         const loginData = {
             username: targetUsername,
             password: password,

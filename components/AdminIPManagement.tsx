@@ -23,7 +23,6 @@ interface IPBlock {
   username?: string;
   failed_attempts: number;
   expires_at?: string;
-  user_id?: string;
 }
 
 interface IPStats {
@@ -50,6 +49,15 @@ const AdminIPManagement: React.FC = () => {
       const baseUrl = await NetworkConfig.getBaseUrl();
       const token = await SecureStore.getItemAsync('access_token');
       
+      if (!token) {
+        console.error('No access token found');
+        Alert.alert('Eroare', 'Nu sunteți autentificat. Vă rugăm să vă autentificați din nou.');
+        setLoading(false);
+        return;
+      }
+      
+      console.log(`Fetching IP blocks from: ${baseUrl}/admin/ip-blocks?active_only=${activeOnly}&limit=100`);
+      
       const response = await fetch(`${baseUrl}/admin/ip-blocks?active_only=${activeOnly}&limit=100`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -61,10 +69,15 @@ const AdminIPManagement: React.FC = () => {
         const data = await response.json();
         setIpBlocks(data);
       } else {
-        console.error('Failed to fetch IP blocks');
+        const errorText = await response.text();
+        console.error('Failed to fetch IP blocks:', response.status, errorText);
+        Alert.alert('Eroare', `Nu s-au putut încărca blocurile IP. Status: ${response.status}`);
       }
     } catch (error) {
       console.error('Error fetching IP blocks:', error);
+      Alert.alert('Eroare', 'A apărut o eroare la încărcarea blocurilor IP. Verificați conexiunea la internet.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,6 +85,11 @@ const AdminIPManagement: React.FC = () => {
     try {
       const baseUrl = await NetworkConfig.getBaseUrl();
       const token = await SecureStore.getItemAsync('access_token');
+      
+      if (!token) {
+        console.error('No access token found');
+        return;
+      }
       
       const response = await fetch(`${baseUrl}/admin/ip-blocks/stats`, {
         headers: {
@@ -83,6 +101,8 @@ const AdminIPManagement: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setStats(data);
+      } else {
+        console.error('Failed to fetch stats:', response.status);
       }
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -93,7 +113,6 @@ const AdminIPManagement: React.FC = () => {
     const loadData = async () => {
       setLoading(true);
       await Promise.all([fetchIPBlocks(), fetchStats()]);
-      setLoading(false);
     };
     
     loadData();
