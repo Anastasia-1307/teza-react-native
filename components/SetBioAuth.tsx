@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BiometricStorage } from '../utils/BiometricStorage';
 import { Logger } from '../utils/Logger';
+import { NetworkConfig } from '../utils/NetworkConfig';
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e1c697ff', padding: 20 },
@@ -43,7 +44,7 @@ export default function SetBioAuth() {
       setIsSupported(false);
     }
   };
-  // Verificăm dacă userul curent are biometric activ
+  // Verificăm dacă userul curent are biometric activ (local + server)
   const checkBioAuthStatus = async () => {
     try {
       const token = await SecureStore.getItemAsync('access_token');
@@ -55,7 +56,31 @@ export default function SetBioAuth() {
 
       if (username) {
         const bioStatus = await BiometricStorage.getBiometricStatus(username);
-        setIsBioEnabled(bioStatus.enabled);
+        const hasLocalData = bioStatus.enabled;
+
+        // Verificăm și dacă există token persistent pe server
+        let hasServerToken = false;
+        try {
+          const baseUrl = await NetworkConfig.getBaseUrl();
+          const response = await fetch(`${baseUrl}/auth/biometric/status/${username}`);
+          // Check if response is actually JSON before parsing
+          const contentType = response.headers.get('content-type');
+          let data;
+          if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+          } else {
+            // If not JSON, create a generic error structure
+            const text = await response.text();
+            data = { biometric_available: false };
+            console.error('Non-JSON response from server in SetBioAuth:', text);
+          }
+          hasServerToken = data.biometric_available === true;
+        } catch (serverError) {
+          console.error('Error checking server biometric status:', serverError);
+        }
+
+        // Biometricul este cu adevărat activ doar dacă există și local, și pe server
+        setIsBioEnabled(hasLocalData && hasServerToken);
       }
     } catch (error) {
       console.error('Error checking bio auth status:', error);
@@ -73,47 +98,87 @@ export default function SetBioAuth() {
         Alert.alert('Eroare', 'Nu s-a putut obține utilizatorul curent.');
         return;
       }
-      // Check if biometric data already exists
+
+      // 1. Verificăm dacă avem deja chei locale (AES key etc)
       const hasExistingData = await BiometricStorage.hasBiometricData(currentUsername);
+      
+      // 2. Cerem autentificarea biometrică pentru confirmare
       const authResult = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Verifică identitatea pentru a confirma autentificarea biometrică',
+        promptMessage: 'Verifică identitatea pentru a confirma activarea biometriei',
         cancelLabel: 'Anulează',
         fallbackLabel: 'Folosește parola',
       });
+
       if (!authResult.success) {
-        Alert.alert('Eroare', 'Verificarea biometrică a eșuat.');
+        Alert.alert('Eroare', 'Verificarea biometrică a eșuat sau a fost anulată.');
         return;
       }
 
-      if (hasExistingData) {
-        // Biometric data is already configured, just confirm it's working
-        await Logger.logUserEvent(currentUsername, 'confirm_bio_auth', {
-          bio_method: 'aes_key',
-          timestamp: new Date().toISOString()
-        });
+      // 3. Apelăm serverul pentru a genera token-ul persistent în DB
+      const baseUrl = await NetworkConfig.getBaseUrl();
+      const token = await SecureStore.getItemAsync('access_token');
+      
+      const response = await fetch(`${baseUrl}/auth/biometric/setup`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in SetBioAuth error handling:', text);
+        }
+        throw new Error(errorData.detail || 'Failed to setup biometric authentication');
+      }
+      
+      // Check if response is actually JSON before parsing
+          const contentType = response.headers.get('content-type');
+          let data;
+          if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+          } else {
+            // If not JSON, create a generic error structure
+            const text = await response.text();
+            data = { biometric_available: false };
+            console.error('Non-JSON response from server in SetBioAuth:', text);
+          }
+      
+      
+      console.log("✅ Biometric setup successful on server. Clearing local session...");
+      
+      // Ștergem toate datele de sesiune
+      await SecureStore.deleteItemAsync('access_token');
+      await SecureStore.deleteItemAsync('refresh_token');
+  
+      await BiometricStorage.clearUserDisabledFlag(currentUsername);
 
-        // Clear the disabled flag since user is re-enabling biometric
-        await BiometricStorage.clearUserDisabledFlag(currentUsername);
+      // 5. Notificăm userul și îl trimitem la Login
+      Alert.alert(
+        'Activare reușită',
+        'Autentificarea biometrică a fost configurată. Te rugăm să te loghezi din nou cu parola pentru a o activa.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              router.replace('/login'); 
+            }
+          }
+        ]
+      );
 
-        setIsBioEnabled(true);
-        Alert.alert('Succes', `Autentificarea biometrică este activată pentru ${currentUsername}.`);
-      } else {
-        // Clear the disabled flag so auto-setup will work on next login
-        await BiometricStorage.clearUserDisabledFlag(currentUsername);
-        // This shouldn't happen with the new login flow, but handle it gracefully
-        Alert.alert(
-          'Date biometrice indisponibile',
-          'Nu am putut accesa datele biometrice. Pentru a le reconfigura, deconectați-vă și autentificați-vă din nou folosind parola.',
-          [
-            { text: 'Mai târziu',
-              style: 'cancel' },
-            {
-              text: 'Deloghează-mă',
-              onPress: () => {
-                router.replace('/login'); } } ] ); }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error enabling biometric auth:', error);
-      Alert.alert('Eroare', 'Nu s-a putut activa autentificarea biometrică.');
+      Alert.alert('Eroare', `Nu s-a putut activa biometria: ${error.message}`);
     } finally {
       setIsLoading(false);
     }

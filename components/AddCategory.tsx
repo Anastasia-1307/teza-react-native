@@ -43,12 +43,32 @@ export default function AddCategory() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+      const contentType = response.headers.get('content-type');
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // If not JSON, create a generic error structure
+        const text = await response.text();
+        data = { name: 'Category saved' };
+        console.error('Non-JSON response from server in AddCategory:', text);
+      }
         Alert.alert('Succes', `Categoria "${data.name}" a fost salvată cu succes!`);
         setCategoryName('');
         setRefreshTrigger(prev => prev + 1); // Trigger refresh of category list
       } else {
-        const errorData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AddCategory error:', text);
+        }
         Alert.alert('Eroare', errorData.detail || 'Nu s-a putut salva categoria');
       }
     } catch (error) {

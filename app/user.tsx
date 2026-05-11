@@ -9,8 +9,12 @@ export default function UserPage() {
   useEffect(() => {
     const checkAuth = async () => {
       const token = await SecureStore.getItemAsync('access_token');
+      console.log('User page - checking auth, token exists:', token ? 'YES' : 'NO');
       if (!token) {
+        console.log('User page - no token found, redirecting to login');
         router.replace('/login');
+      } else {
+        console.log('User page - token found, staying on user page');
       }
     };
 

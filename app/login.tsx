@@ -5,7 +5,6 @@ import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { BiometricStorage } from '../utils/BiometricStorage';
-import { Logger } from '../utils/Logger';
 import { NetworkConfig } from '../utils/NetworkConfig';
 
 
@@ -149,9 +148,6 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [showBioButton, setShowBioButton] = useState(false);
     const [failedAttempts, setFailedAttempts] = useState(0);
-    const [isBlocked, setIsBlocked] = useState(false);
-    const [blockTimeRemaining, setBlockTimeRemaining] = useState(0);
-    const [lastAttemptTime, setLastAttemptTime] = useState<number | null>(null);
 
 
 
@@ -161,64 +157,7 @@ export default function LoginPage() {
         checkBiometricAvailability();
     }, []); // Rulăm doar la încărcare
 
-    // Calculează delay-ul în funcție de numărul de încercări eșuate
-    const getDelayForFailedAttempts = (attempts: number): number => {
-        if (attempts <= 5) return 0; // Fără pauză pentru primele 5 încercări
-        if (attempts <= 10) return 10000; // 10 secunde după 5 încercări eșuate
-        if (attempts <= 15) return 30000; // 30 secunde după 10 încercări eșuate
-        if (attempts <= 20) return 120000; // 2 minute după 15 încercări eșuate
-        if (attempts <= 25) return 300000; // 5 minute după 20 încercări eșuate
-        if (attempts <= 30) return 900000; // 15 minute după 25 încercări eșuate
-        return Infinity; // Blocare cont permanentă după 30+ încercări
-    };
-
-    // Verifică dacă utilizatorul este blocat și actualizează timer-ul
-    useEffect(() => {
-        if (lastAttemptTime && failedAttempts > 0) {
-            const delay = getDelayForFailedAttempts(failedAttempts);
-            if (delay === Infinity) {
-                setIsBlocked(true);
-                setBlockTimeRemaining(Infinity);
-                return;
-            }
-
-            const elapsed = Date.now() - lastAttemptTime;
-            const remaining = Math.max(0, delay - elapsed);
-            if (remaining > 0) {
-                setIsBlocked(true);
-                setBlockTimeRemaining(remaining);
-                const timer = setInterval(() => {
-                    const newElapsed = Date.now() - lastAttemptTime;
-                    const newRemaining = Math.max(0, delay - newElapsed);
-                    
-                    if (newRemaining === 0) {
-                        setIsBlocked(false);
-                        setBlockTimeRemaining(0);
-                        clearInterval(timer);
-                    } else {
-                        setBlockTimeRemaining(newRemaining);
-                    }
-                }, 1000);
-
-                return () => clearInterval(timer);
-            } else {
-                setIsBlocked(false);
-                setBlockTimeRemaining(0);
-            }
-        }
-    }, [failedAttempts, lastAttemptTime]);
-
-    // Formatează timpul rămas în format citibil
-    const formatTimeRemaining = (ms: number): string => {
-        if (ms === Infinity) return 'Cont blocat permanent';
-        const seconds = Math.ceil(ms / 1000);
-        if (seconds < 60) return `${seconds} secunde`;
-        const minutes = Math.ceil(seconds / 60);
-        if (minutes < 60) return `${minutes} minute`;
-        const hours = Math.ceil(minutes / 60);
-        return `${hours} ore`;
-    };
-
+    
     useEffect(() => {
     
         if (username.length > 0) {
@@ -250,34 +189,54 @@ export default function LoginPage() {
                             // Verificăm și starea token-ului persistent din baza de date
                             try {
                                 const baseUrl = await NetworkConfig.getBaseUrl();
-                                const response = await fetch(`${baseUrl}/auth/biometric/status/${user}`);
-                                const data = await response.json();
-                                if (data.biometric_available) {
-                                    hasValidServerToken = true;
-                                    console.log(`User ${user} has valid persistent token`);
-                                } else {
-                                    await BiometricStorage.deleteBiometricData(user);
-                                }
-                            } catch (serverError) {
-                                console.error(`Error checking server status for ${user}:`, serverError);
-                            }
-                            
-                            break;
-                        }
-                    } catch (error) {
-                        console.error(`Error checking user ${user}:`, error);
-                    }
-                }
-            }
+                                const response = await fetch(`${baseUrl}/auth/biometric/status/${user}`, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    }
+                                });
+                                
+                                console.log(`🌐 Server response status for ${user}:`, response.status);
+                                console.log(`🌐 Server response headers:`, Object.fromEntries(response.headers.entries()));
+                                
+                                // Check if response is actually JSON before parsing
+            const contentType = response.headers.get('content-type');
+            let data;
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+                console.log(`🌐 Server response data for ${user}:`, data);
+            } else {
+                // If not JSON, create a generic error structure
+                const text = await response.text();
+                data = { detail: `Server error: ${response.status}` };
+                console.error('Non-JSON response from server:', text);}
+            if (data.has_persistent_token === true) {
+            hasValidServerToken = true;
+            console.log(`✅ Found user ${user} with valid server token!`);
+            break; // Break only if we found both local data AND server token
+            } else if (data.reason === 'admin_user_not_allowed') {
+            console.log(`❌ User ${user} is admin - biometric auth not allowed, continuing search...`);
+            } else { console.log(`❌ User ${user} has local biometric data but no valid server token, continuing search...`);}
+            } catch (serverError: any) {
+            console.error(`❌ Error checking server status for ${user}:`, serverError);
+            console.error(`❌ Server error details:`, {
+            message: serverError.message,
+            status: serverError.status,
+            stack: serverError.stack});
+            }} } catch (error) { console.error(`Error checking user ${user}:`, error);}}}
             
-            console.log('Biometric availability check:', { 
+            console.log('🔍 DETAILED Biometric availability check:', { 
                 hasHardware, 
                 isEnrolled,
                 biometricUsersCount: biometricUsers.length,
                 biometricUsers: biometricUsers,
                 hasValidBiometricData,
                 hasValidServerToken,
-                finalCondition: hasHardware && isEnrolled && hasValidBiometricData && hasValidServerToken
+                finalCondition: hasHardware && isEnrolled && hasValidBiometricData && hasValidServerToken,
+                step1_hardware: hasHardware ? '✅' : '❌',
+                step2_enrolled: isEnrolled ? '✅' : '❌', 
+                step3_local_data: hasValidBiometricData ? '✅' : '❌',
+                step4_server_token: hasValidServerToken ? '✅' : '❌'
             });
             
          
@@ -309,9 +268,34 @@ export default function LoginPage() {
             setError('Nu există utilizatori cu autentificare biometrică configurată.');
             return;
         }
-        const targetUsername = biometricUsers[0];
+        // Găsește primul utilizator care nu este admin
+        let targetUsername = null;
+        const baseUrl = await NetworkConfig.getBaseUrl();
         
-        console.log('Attempting biometric auth...');
+        for (const user of biometricUsers) {
+            try {
+                const response = await fetch(`${baseUrl}/auth/biometric/status/${user}`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json', }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.reason !== 'admin_user_not_allowed') {
+                        targetUsername = user;
+                        console.log('Found valid user for biometric auth:', user);
+                        break;
+                    } }
+            } catch (error) {
+                console.error('Error checking user role for biometric auth:', error);
+            }
+        }
+        
+        if (!targetUsername) {
+            setError('Nu există utilizatori cu biometrică validă pentru autentificare.');
+            return;
+        }
+        
+        console.log('Attempting biometric auth for user:', targetUsername);
 
         // Autentificare biometrică
         const result = await LocalAuthentication.authenticateAsync({
@@ -346,6 +330,26 @@ const performBiometricLogin = async (targetUsername: string) => {
             setError('Autentificarea biometrică nu este activată pentru acest utilizator.');
             return;
         }
+        
+        // Verificăm dacă utilizatorul este admin (biometric auth doar pentru useri obișnuiți)
+        try {
+            const baseUrl = await NetworkConfig.getBaseUrl();
+            const response = await fetch(`${baseUrl}/auth/biometric/status/${targetUsername}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.reason === 'admin_user_not_allowed') {
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error('Error checking user role for biometric auth:', error);
+        }
         console.log('Performing biometric login...');
         // Decriptează parola cu cheia AES biometrică
         let password: string;
@@ -366,25 +370,25 @@ const performBiometricLogin = async (targetUsername: string) => {
             setError('Nu s-a putut decripta parola. Loghează-te cu parola.');
             return;
         }
-        const loginData = {
-            username: targetUsername,
-            password: password,
-            grant_type: "password"
-        };
-        
+        const loginData = { username: targetUsername, password: password, grant_type: "password"};
         const baseUrl = await NetworkConfig.getBaseUrl();
-
         // Folosim noul endpoint pentru autentificare directă biometrică
         const response = await fetch(`${baseUrl}/auth/biometric/direct`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json', },
             body: JSON.stringify(loginData),
-        });
+         });
 
-        const data = await response.json();
-
+        // Check if response is actually JSON before parsing
+            const contentType = response.headers.get('content-type');
+            let data;
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                // If not JSON, create a generic error structure
+                const text = await response.text();
+                data = { detail: `Server error: ${response.status}` };
+                console.error('Non-JSON response from server:', text);   }
         if (response.ok) {
             await SecureStore.setItemAsync('access_token', data.access_token);
             await SecureStore.setItemAsync('refresh_token', data.refresh_token);
@@ -393,13 +397,17 @@ const performBiometricLogin = async (targetUsername: string) => {
             if (data.persistent_refresh_token) {
                 await SecureStore.setItemAsync('persistent_refresh_token', data.persistent_refresh_token);
             }
-
             await SecureStore.setItemAsync('last_logged_user', bioStatus.username);
-
-            const tokenPayload = JSON.parse(atob(data.access_token.split('.')[1]));
-            const userRole = tokenPayload.role;
-
-            router.replace(userRole === 'admin' ? '/admin' : '/user');
+            // Use server-provided redirect information
+            const redirectPath = data.redirect_to || '/user';
+            console.log('Biometric auth redirecting to:', redirectPath, 'User role:', data.user_role);
+            console.log('Full server response:', data);
+            
+            // Verify tokens are stored before redirect
+            const accessToken = await SecureStore.getItemAsync('access_token');
+            const refreshToken = await SecureStore.getItemAsync('refresh_token');
+            console.log('Tokens stored - Access:', accessToken ? 'YES' : 'NO', 'Refresh:', refreshToken ? 'YES' : 'NO');
+            router.replace(redirectPath);
         } else {
             setError(data.detail || "Eroare la autentificare");
         }
@@ -414,16 +422,7 @@ const performBiometricLogin = async (targetUsername: string) => {
     const handleLogin = async () => {
         setError("");
         
-        // Verifică dacă utilizatorul este blocat
-        if (isBlocked) {
-            if (blockTimeRemaining === Infinity) {
-                setError("Contul este blocat permanent. Contactați administratorul.");
-            } else {
-                setError(`Prea multe încercări eșuate. Încercați din nou în ${formatTimeRemaining(blockTimeRemaining)}.`);
-            }
-            return;
-        }
-        // Validation
+                // Validation
         if(username.trim() === "" || password.trim() === "" ) {
             setError("Toate câmpurile sunt obligatorii.");
             return;
@@ -448,117 +447,63 @@ const performBiometricLogin = async (targetUsername: string) => {
                 },
                 body: JSON.stringify(loginData),
             });
-            const data = await response.json();
+            // Check if response is actually JSON before parsing
+            const contentType = response.headers.get('content-type');
+            let data;
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                // If not JSON, create a generic error structure
+                const text = await response.text();
+                data = { detail: `Server error: ${response.status}` };
+                console.error('Non-JSON response from server:', text);
+            }
             if (response.ok) {
                 // Reset failed attempts on successful login
                 setFailedAttempts(0);
-                setLastAttemptTime(null);
-                setIsBlocked(false);
-                setBlockTimeRemaining(0);
                 // Store tokens using SecureStore for maximum security
                 await SecureStore.setItemAsync('access_token', data.access_token);
                 await SecureStore.setItemAsync('refresh_token', data.refresh_token);
-                // Stochează persistent refresh token dacă există
-                if (data.persistent_refresh_token) {
-                    await SecureStore.setItemAsync('persistent_refresh_token', data.persistent_refresh_token);}
-                // Save password temporarily for biometric setup
-                await SecureStore.setItemAsync('user_password', password);
-                // Save credentials for biometric authentication if enabled for this user
                 const trimmedUsername = username.trim();
-                const hasExistingBiometricData = await BiometricStorage.hasBiometricData(trimmedUsername);
                 await SecureStore.setItemAsync('last_logged_user', trimmedUsername);
-              const tokenPayload = JSON.parse(atob(data.access_token.split('.')[1]));
-              const userRole = tokenPayload.role;
-               await SecureStore.setItemAsync('last_logged_user', trimmedUsername);
 
-      
-
-                if (userRole !== 'admin') {
-                        // Set up biometric authentication for all non-admin users, ONLY if they haven't explicitly disabled it
-                        try {
-                            const hasDisabled = await BiometricStorage.hasUserDisabledBiometric(trimmedUsername);
-                            if (!hasDisabled) {
-                                await BiometricStorage.generateAndSaveBiometricKey(trimmedUsername);
-                                await BiometricStorage.encryptPasswordWithBiometricKey(trimmedUsername, password);
-                                console.log('Biometric authentication set up successfully for:', trimmedUsername);
-                            } else {
-                                console.log('User has explicitly disabled biometric, skipping auto-setup:', trimmedUsername);
-                            }
-                        } catch (bioError) {
-                            console.error('Failed to set up biometric authentication:', bioError);
-                            // Continue with login even if biometric setup fails
-                        }
-                        }
-                console.log('Checking biometric save:', {
-                    username: trimmedUsername,
-                    hasExistingBiometricData,
-                    passwordLength: password.length
-                });
-                
-          
-                // Decode JWT to get user role
+                // Auto-setup biometric data if user hasn't explicitly disabled it
                 try {
-                    const tokenPayload = JSON.parse(atob(data.access_token.split('.')[1]));
-                    const userRole = tokenPayload.role;
-                    
-                    // Navigate based on role - direct navigation without Alert
-                    if (userRole === 'admin') {
-                        router.replace('/admin');
+                    const hasDisabledBio = await BiometricStorage.hasUserDisabledBiometric(trimmedUsername);
+                    if (!hasDisabledBio) {
+                        await BiometricStorage.saveBiometricData(trimmedUsername, password.trim());
+                        console.log('Biometric data auto-saved for user:', trimmedUsername);
                     } else {
-                        router.replace('/user');
+                        console.log('User previously disabled biometric, skipping auto-setup');
                     }
-                } catch (decodeError) {
-                    console.error('Token decode error:', decodeError);
-                    // Fallback to user page if we can't decode the token
+                } catch (bioError) {
+                    console.error('Error auto-saving biometric data:', bioError);
+                }
+
+                // Use server-provided redirect information
+                try {
+                    const redirectPath = data.redirect_to || '/user';
+                    const userRole = data.user_role || 'unknown';
+                    console.log('Password auth redirecting to:', redirectPath, 'User role:', userRole);
+                    
+                    // Navigate based on server-provided redirect path
+                    router.replace(redirectPath);
+                } catch (redirectError) {
+                    console.error('Redirect error:', redirectError);
+                    // Fallback to user page if redirect fails
                     router.replace('/user');
                 }
             } else {
                 // Increment failed attempts on failed login
                 const newFailedAttempts = failedAttempts + 1;
                 setFailedAttempts(newFailedAttempts);
-                setLastAttemptTime(Date.now());
-                
-                // Check if this failed attempt triggers a block
-                const delay = getDelayForFailedAttempts(newFailedAttempts);
-                const willBeBlocked = delay > 0;
-                
-                console.log(' Failed login debug:', {
-                    newFailedAttempts,
-                    delay,
-                    willBeBlocked,
-                    username
-                });
-                
-                // Log IP block if user will be blocked
-                if (willBeBlocked) {
-                    console.log('User will be blocked, logging IP block...');
-                    const logIPBlock = async () => {
-                        try {
-                            const currentIP = await Logger.getCurrentIP();
-                            console.log('Current IP:', currentIP);
-                            await Logger.logIPBlock(username, currentIP, delay, newFailedAttempts);
-                        } catch (error) {
-                            console.error('Error logging IP block:', error);
-                        }
-                    };
-                    logIPBlock();
-                } else {
-                    console.log('User will not be blocked, no IP block logging');
-                }
                 
                 // Handle server errors - convert object to string
                 const errorMessage = typeof data.detail === 'string' 
                     ? data.detail 
                     : JSON.stringify(data.detail) || "A apărut o eroare la autentificare.";
                 
-                // Add brute-force warning to error message
-                if (delay === Infinity) {
-                    setError(`${errorMessage}. Contul este acum blocat permanent.`);
-                } else if (newFailedAttempts > 5 && newFailedAttempts % 5 === 0) {
-                    setError(`${errorMessage}. Atenție: încercări eșuate: ${newFailedAttempts}. Următoarea încercare va avea o pauză de ${formatTimeRemaining(delay)}.`);
-                } else {
-                    setError(errorMessage);
-                }
+                setError(errorMessage);
             }
         } catch (error) {
             console.error('Login error:', error);
@@ -595,19 +540,9 @@ const performBiometricLogin = async (targetUsername: string) => {
 </View>
 {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-{isBlocked && (
-  <View style={styles.lockoutWarning}>
-    <Text style={styles.lockoutText}>
-      {blockTimeRemaining === Infinity 
-        ? '⚠️ Cont blocat permanent. Contactați administratorul.'
-        : `⏰ Așteptați ${formatTimeRemaining(blockTimeRemaining)} până la următoarea încercare.`
-      }
-    </Text>
-  </View>
-)}
 
 <View style={styles.buttonContainer}>
-<TouchableOpacity style={styles.button} onPress={handleLogin} disabled={isLoading || isBlocked}>
+<TouchableOpacity style={styles.button} onPress={handleLogin} disabled={isLoading}>
     <Text style={styles.buttonText}>{isLoading ? "Se încarcă..." : "Autentificare"}</Text>
 </TouchableOpacity>
 </View>
@@ -619,7 +554,7 @@ const performBiometricLogin = async (targetUsername: string) => {
 
 {showBioButton && (
   <View style={{ alignItems: 'center', marginTop: 20 }}>
-    <TouchableOpacity style={styles.bioButton} onPress={handleBiometricAuth} disabled={isLoading || isBlocked}>
+    <TouchableOpacity style={styles.bioButton} onPress={handleBiometricAuth} disabled={isLoading}>
       <Ionicons name="finger-print" size={20} color="#fff" />
       <Text style={styles.bioButtonText}>Autentificare biometrică</Text>
     </TouchableOpacity>

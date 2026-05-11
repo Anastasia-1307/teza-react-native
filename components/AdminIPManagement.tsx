@@ -66,7 +66,17 @@ const AdminIPManagement: React.FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          data = [];
+          console.error('Non-JSON response from server in AdminIPManagement:', text);
+        }
         setIpBlocks(data);
       } else {
         const errorText = await response.text();
@@ -99,7 +109,17 @@ const AdminIPManagement: React.FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          data = [];
+          console.error('Non-JSON response from server in AdminIPManagement:', text);
+        }
         setStats(data);
       } else {
         console.error('Failed to fetch stats:', response.status);
@@ -149,7 +169,17 @@ const AdminIPManagement: React.FC = () => {
         setNewDuration('3600000');
         await Promise.all([fetchIPBlocks(), fetchStats()]);
       } else {
-        const error = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let error;
+        if (contentType && contentType.includes('application/json')) {
+          error = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          error = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AdminIPManagement error:', text);
+        }
         Alert.alert('Eroare', error.detail || 'Blocarea adresei IP a eșuat');
       }
     } catch (error) {
@@ -184,7 +214,17 @@ const AdminIPManagement: React.FC = () => {
                 Alert.alert('Succes', 'Blocul IP a fost șters cu succes');
                 await Promise.all([fetchIPBlocks(), fetchStats()]);
               } else {
-                const error = await response.json();
+                // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let error;
+        if (contentType && contentType.includes('application/json')) {
+          error = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          error = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AdminIPManagement error:', text);
+        }
                 Alert.alert('Eroare', error.detail || 'Eliminarea blocului IP a eșuat');
               }
             } catch (error) {
@@ -215,10 +255,30 @@ const AdminIPManagement: React.FC = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          data = [];
+          console.error('Non-JSON response from server in AdminIPManagement:', text);
+        }
         setCheckResult(data);
       } else {
-        const error = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let error;
+        if (contentType && contentType.includes('application/json')) {
+          error = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          error = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AdminIPManagement error:', text);
+        }
         Alert.alert('Eroare', error.detail || 'Verificarea adresei IP a eșuat');
       }
     } catch (error) {
@@ -250,11 +310,31 @@ const AdminIPManagement: React.FC = () => {
               });
 
               if (response.ok) {
-                const result = await response.json();
+                // Check if response is actually JSON before parsing
+              const contentType = response.headers.get('content-type');
+              let result;
+              if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+              } else {
+                // If not JSON, create a generic error structure
+                const text = await response.text();
+                result = { message: 'Server response received' };
+                console.error('Non-JSON response from server in AdminIPManagement result:', text);
+              }
                 Alert.alert('Success', result.message);
                 await Promise.all([fetchIPBlocks(), fetchStats()]);
               } else {
-                const error = await response.json();
+                // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let error;
+        if (contentType && contentType.includes('application/json')) {
+          error = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          error = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AdminIPManagement error:', text);
+        }
                 Alert.alert('Eroare', error.detail || 'Curățarea a eșuat');
               }
             } catch (error) {

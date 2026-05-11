@@ -78,7 +78,17 @@ const CustomDrawerContent = (props: DrawerContentComponentProps) => {
           if (response.ok) {
             apiCallSuccessful = true;
             try {
-              const data = await response.json();
+              // Check if response is actually JSON before parsing
+              const contentType = response.headers.get('content-type');
+              let data;
+              if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+              } else {
+                // If not JSON, just log success without parsing
+                const text = await response.text();
+                data = null;
+                console.log('Logout API successful (non-JSON response):', text);
+              }
               console.log('Logout API successful:', data);
             } catch (jsonError) {
               console.log('Logout API successful (no JSON response)');

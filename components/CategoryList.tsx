@@ -40,11 +40,31 @@ export default function CategoryList({ onCategorySelect, refreshTrigger }: Categ
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+      const contentType = response.headers.get('content-type');
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // If not JSON, create a generic error structure
+        const text = await response.text();
+        data = [];
+        console.error('Non-JSON response from server in CategoryList:', text);
+      }
         setCategories(data);
         console.log(`Loaded ${data.length} categories for current user`);
       } else {
-        const errorData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in CategoryList error:', text);
+        }
         setError(errorData.detail || 'Nu s-au putut încărca categoriile');
       }
     } catch (error) {
@@ -86,7 +106,17 @@ export default function CategoryList({ onCategorySelect, refreshTrigger }: Categ
                 Alert.alert('Succes', 'Categoria a fost ștearsă');
                 fetchCategories(); // Refresh the list
               } else {
-                const errorData = await response.json();
+                // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in CategoryList error:', text);
+        }
                 Alert.alert('Eroare', errorData.detail || 'Nu s-a putut șterge categoria');
               }
             } catch (error) {

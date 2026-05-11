@@ -35,7 +35,17 @@ export default function AdminLogs() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+      const contentType = response.headers.get('content-type');
+      let data;
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // If not JSON, create a generic error structure
+        const text = await response.text();
+        data = [];
+        console.error('Non-JSON response from server in AdminLogs:', text);
+      }
         setLogs(data);
       } else {
         console.error('Failed to fetch logs:', response.statusText);

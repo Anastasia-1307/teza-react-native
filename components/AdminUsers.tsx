@@ -38,7 +38,17 @@ export default function AdminUsers() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          data = [];
+          console.error('Non-JSON response from server in AdminUsers:', text);
+        }
         setUsers(data);
         
         // Get current user ID from token
@@ -75,7 +85,17 @@ export default function AdminUsers() {
       });
 
       if (response.ok) {
-        const responseData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let responseData;
+        if (contentType && contentType.includes('application/json')) {
+          responseData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          responseData = null;
+          console.error('Non-JSON response from server in AdminUsers update:', text);
+        }
         
         // Daca utilizatorul este promovat la admin, sterge datele biometrice
         if (newRole === 'admin' && username) {
@@ -100,7 +120,17 @@ export default function AdminUsers() {
         setRoleModalVisible(false);
         setSelectedUser(null);
       } else {
-        const errorData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AdminUsers error:', text);
+        }
         Alert.alert('Eroare', errorData.detail || 'Nu s-a putut actualiza rolul');
       }
     } catch (error) {
@@ -137,7 +167,17 @@ export default function AdminUsers() {
                 Alert.alert('Succes', 'Utilizatorul a fost șters');
                 fetchUsers();
               } else {
-                const errorData = await response.json();
+                // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AdminUsers error:', text);
+        }
                 Alert.alert('Eroare', errorData.detail || 'Nu s-a putut șterge utilizatorul');
               }
             } catch (error) {

@@ -1,23 +1,19 @@
-
+import { useNavigation } from '@react-navigation/native';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 export default function UserContent() {
- 
+  const navigation = useNavigation();
 
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Gestionare parole</Text>
       <Text style={styles.subtitle}>Bine ați venit!</Text>
-      
+
       <View style={{ marginVertical: 20 }} />
-      
      <View style={styles.content}>
-           
-           
-       
-           
+
            <Text style={styles.placeholderBold}>
              Bune practici pentru setarea parolelor!
            </Text>
@@ -36,11 +32,11 @@ export default function UserContent() {
           însă nu toate aplicațiile permit introducerea spațiilor. De aceea se recomandă utilizarea frazelor ca
           un singur cuvânt complex. De exemplu: LaMulțiAni! sau La_multi_ani!
            </Text>
-   
+
        <View style={{ marginBottom: 60 }} />
-   
+
          </View>
-      
+
     </View>
   );
 }
@@ -96,7 +92,5 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     color: '#333',
     fontWeight: 'bold',
-  },
-  
-
+  }, 
 });

@@ -34,7 +34,17 @@ export class TokenManager {
                 body: JSON.stringify(requestBody),
             });
 
-            const data = await response.json();
+            // Check if response is actually JSON before parsing
+            const contentType = response.headers.get('content-type');
+            let data;
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                // If not JSON, create a generic error structure
+                const text = await response.text();
+                data = { detail: `Server error: ${response.status}` };
+                console.error('Non-JSON response from server:', text);
+            }
 
             if (response.ok) {
                 // Store new access token

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CryptoUtils } from '../utils/CryptoUtils';
@@ -69,11 +69,31 @@ export default function AddPassword() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          data = [];
+          console.error('Non-JSON response from server in AddPassword:', text);
+        }
         setCategories(data);
         console.log(` Loaded ${data.length} categories for password form`);
       } else {
-        const errorData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AddPassword error:', text);
+        }
         console.error('Failed to fetch categories:', errorData.detail);
       }
     } catch (error) {
@@ -104,12 +124,34 @@ export default function AddPassword() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          data = [];
+          console.error('Non-JSON response from server in AddPassword:', text);
+        }
         setPasswords(data);
         console.log(` Loaded ${data.length} passwords for user`);
-        console.log(' Password data structure:', data[0]); // Log first password to see structure
+        if (data.length > 0) {
+          console.log(' Password data structure:', data[0]); // Log first password to see structure
+        }
       } else {
-        const errorData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AddPassword error:', text);
+        }
         setPasswordsError(errorData.detail || 'Failed to fetch passwords');
         console.error('Failed to fetch passwords:', errorData.detail);
       }
@@ -121,19 +163,21 @@ export default function AddPassword() {
     }
   };
 
+  const isFirstFocus = useRef(true);
+  const skipInitialRefreshTrigger = useRef(true);
+
   useEffect(() => {
     fetchCategories();
     fetchPasswords();
-    
-    // Test encryption/decryption
-    console.log(' Running encryption test...');
-    const testResult = CryptoUtils.testEncryption();
-    console.log(' Encryption test result:', testResult);
   }, []);
 
   // Refresh both categories and passwords when coming back from AddCategory
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
       fetchCategories();
       fetchPasswords();
     });
@@ -142,6 +186,10 @@ export default function AddPassword() {
 
   // Refresh passwords when refreshTrigger changes
   useEffect(() => {
+    if (skipInitialRefreshTrigger.current) {
+      skipInitialRefreshTrigger.current = false;
+      return;
+    }
     fetchPasswords();
   }, [refreshTrigger]);
 
@@ -189,10 +237,18 @@ export default function AddPassword() {
         setSelectedCategory(null);
         // Refresh passwords list
         setRefreshTrigger(prev => prev + 1);
-        // Also fetch passwords directly
-        fetchPasswords();
       } else {
-        const errorData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AddPassword error:', text);
+        }
         Alert.alert('Eroare', errorData.detail || 'Nu s-a putut salva parola');
       }
     } catch (error) {
@@ -264,7 +320,17 @@ export default function AddPassword() {
                 // Refresh passwords list
                 setRefreshTrigger(prev => prev + 1);
               } else {
-                const errorData = await response.json();
+                // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          // If not JSON, create a generic error structure
+          const text = await response.text();
+          errorData = { detail: 'Server error occurred' };
+          console.error('Non-JSON response from server in AddPassword error:', text);
+        }
                 Alert.alert('Eroare', errorData.detail || 'Nu s-a putut șterge parola');
               }
             } catch (error) {

@@ -48,7 +48,17 @@ export class Logger {
       if (response.ok) {
         console.log(`User event logged: ${eventType} for ${username}`);
       } else {
-        const errorData = await response.json();
+        // Check if response is actually JSON before parsing
+        const contentType = response.headers.get('content-type');
+        let errorData;
+        if (contentType && contentType.includes('application/json')) {
+            errorData = await response.json();
+        } else {
+            // If not JSON, create a generic error structure
+            const text = await response.text();
+            errorData = { detail: `Server error: ${response.status}` };
+            console.error('Non-JSON response from server in Logger:', text);
+        }
         console.error(`Failed to log user event: ${eventType}`, errorData);
       }
     } catch (error) {
