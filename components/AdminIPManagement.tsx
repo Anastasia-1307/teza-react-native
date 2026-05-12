@@ -2,15 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  FlatList,
+  Modal,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { NetworkConfig } from '../utils/NetworkConfig';
 
@@ -40,9 +40,26 @@ const AdminIPManagement: React.FC = () => {
   const [showCheckModal, setShowCheckModal] = useState(false);
   const [newIP, setNewIP] = useState('');
   const [newDuration, setNewDuration] = useState('3600000'); // 1 hour default
+  const [selectedHours, setSelectedHours] = useState('1'); // 1 hour default
   const [checkIP, setCheckIP] = useState('');
   const [checkResult, setCheckResult] = useState<any>(null);
   const [activeOnly, setActiveOnly] = useState(false);
+
+  // Helper function to safely convert any value to string for Alert.alert
+  const safeString = (value: any): string => {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.join(', ');
+    if (value === null || value === undefined) return '';
+    return String(value);
+  };
+
+  // Helper function to convert hours to milliseconds
+  const hoursToMilliseconds = (hours: string): string => {
+    const hoursNum = parseInt(hours);
+    const milliseconds = hoursNum * 60 * 60 * 1000; // hours * minutes * seconds * milliseconds
+    console.log(`Converting ${hours} hours to ${milliseconds} milliseconds`);
+    return String(milliseconds);
+  };
 
   const fetchIPBlocks = async () => {
     try {
@@ -139,27 +156,34 @@ const AdminIPManagement: React.FC = () => {
   }, [activeOnly]);
 
   const addIPBlock = async () => {
-    if (!newIP.trim() || !newDuration.trim()) {
-      Alert.alert('Eroare', 'Vă rugăm completați toate câmpurile');
+    if (!newIP.trim()) {
+      Alert.alert('Eroare', 'Vă rugăm introduceți adresa IP');
       return;
     }
+
+    // Convert selected hours to milliseconds (no validation needed since buttons have predefined values)
+    const durationMs = hoursToMilliseconds(selectedHours);
+    console.log(`Selected hours: ${selectedHours}, Duration in ms: ${durationMs}`);
 
     try {
       const baseUrl = await NetworkConfig.getBaseUrl();
       const token = await SecureStore.getItemAsync('access_token');
       
-      const response = await fetch(`${baseUrl}/admin/ip-blocks`, {
+      const requestBody = {
+          ip_address: newIP.trim(),
+          block_duration: parseInt(durationMs),
+          username: 'admin_manual',
+          failed_attempts: 1
+        };
+        console.log('Request body:', requestBody);
+        
+        const response = await fetch(`${baseUrl}/admin/ip-blocks`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ip_address: newIP.trim(),
-          block_duration: parseInt(newDuration),
-          username: 'admin_manual',
-          failed_attempts: 1
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {
@@ -180,7 +204,7 @@ const AdminIPManagement: React.FC = () => {
           error = { detail: 'Server error occurred' };
           console.error('Non-JSON response from server in AdminIPManagement error:', text);
         }
-        Alert.alert('Eroare', error.detail || 'Blocarea adresei IP a eșuat');
+        Alert.alert('Eroare', safeString(error.detail) || 'Blocarea adresei IP a eșuat');
       }
     } catch (error) {
       console.error('Error adding IP block:', error);
@@ -225,7 +249,7 @@ const AdminIPManagement: React.FC = () => {
           error = { detail: 'Server error occurred' };
           console.error('Non-JSON response from server in AdminIPManagement error:', text);
         }
-                Alert.alert('Eroare', error.detail || 'Eliminarea blocului IP a eșuat');
+                Alert.alert('Eroare', safeString(error.detail) || 'Eliminarea blocului IP a eșuat');
               }
             } catch (error) {
               console.error('Error deleting IP block:', error);
@@ -279,7 +303,7 @@ const AdminIPManagement: React.FC = () => {
           error = { detail: 'Server error occurred' };
           console.error('Non-JSON response from server in AdminIPManagement error:', text);
         }
-        Alert.alert('Eroare', error.detail || 'Verificarea adresei IP a eșuat');
+        Alert.alert('Eroare', safeString(error.detail) || 'Verificarea adresei IP a eșuat');
       }
     } catch (error) {
       console.error('Error checking IP address:', error);
@@ -321,7 +345,7 @@ const AdminIPManagement: React.FC = () => {
                 result = { message: 'Server response received' };
                 console.error('Non-JSON response from server in AdminIPManagement result:', text);
               }
-                Alert.alert('Success', result.message);
+                Alert.alert('Success', safeString(result.message));
                 await Promise.all([fetchIPBlocks(), fetchStats()]);
               } else {
                 // Check if response is actually JSON before parsing
@@ -335,7 +359,7 @@ const AdminIPManagement: React.FC = () => {
           error = { detail: 'Server error occurred' };
           console.error('Non-JSON response from server in AdminIPManagement error:', text);
         }
-                Alert.alert('Eroare', error.detail || 'Curățarea a eșuat');
+                Alert.alert('Eroare', safeString(error.detail) || 'Curățarea a eșuat');
               }
             } catch (error) {
               console.error('Error cleaning up:', error);
@@ -349,13 +373,23 @@ const AdminIPManagement: React.FC = () => {
 
   const formatDuration = (ms: number) => {
     if (ms === Infinity) return 'Permanent';
+    
+    // Check if ms is a valid number
+    if (isNaN(ms) || !isFinite(ms)) return 'Timp invalid';
+    
     const seconds = Math.floor(ms / 1000);
     if (seconds < 60) return `${seconds} secunde`;
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes} minute`;
     const hours = Math.floor(minutes / 60);
-    return `${hours} ore`;
+    
+    // Check if hours is valid
+    if (isNaN(hours)) return 'Timp invalid';
+    
+    return `${hours} ${hours === 1 ? 'oră' : 'ore'}`;
   };
+
+ 
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
@@ -372,9 +406,6 @@ const AdminIPManagement: React.FC = () => {
       
       <Text style={styles.blockDetails}>
         Blocat: {formatDate(item.blocked_at)}
-      </Text>
-      <Text style={styles.blockDetails}>
-        Durată: {formatDuration(item.block_duration)}
       </Text>
       {item.expires_at && (
         <Text style={styles.blockDetails}>
@@ -462,19 +493,34 @@ const AdminIPManagement: React.FC = () => {
           
           <TextInput
             style={styles.input}
-            placeholder="Adresă IP (ex: 192.168.1.100)"
+            placeholder="Adresă IP"
             value={newIP}
             onChangeText={setNewIP}
             autoCapitalize="none"
           />
           
-          <TextInput
-            style={styles.input}
-            placeholder="Durată (ms, ex: 3600000 pentru 1 oră)"
-            value={newDuration}
-            onChangeText={setNewDuration}
-            keyboardType="numeric"
-          />
+          <View style={styles.pickerContainer}>
+            <Text style={styles.pickerLabel}>Durată blocare:</Text>
+            <View style={styles.hourButtons}>
+              {['1', '2', '3', '6', '12', '24'].map((hours) => (
+                <TouchableOpacity
+                  key={hours}
+                  style={[
+                    styles.hourButton,
+                    selectedHours === hours && styles.hourButtonSelected
+                  ]}
+                  onPress={() => setSelectedHours(hours)}
+                >
+                  <Text style={[
+                    styles.hourButtonText,
+                    selectedHours === hours && styles.hourButtonTextSelected
+                  ]}>
+                    {hours} {hours === '1' ? 'oră' : 'ore'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
           
           <View style={styles.modalButtons}>
             <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={() => setShowAddModal(false)}>
@@ -514,9 +560,6 @@ const AdminIPManagement: React.FC = () => {
                 <>
                   <Text style={styles.checkResultText}>
                     Blocat la: {formatDate(checkResult.block_details.blocked_at)}
-                  </Text>
-                  <Text style={styles.checkResultText}>
-                    Durată: {formatDuration(checkResult.block_details.block_duration)}
                   </Text>
                   {checkResult.block_details.expires_at && (
                     <Text style={styles.checkResultText}>
@@ -738,6 +781,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 5,
+  },
+  pickerContainer: {
+    marginBottom: 15,
+  },
+  pickerLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  hourButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  hourButton: {
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  hourButtonSelected: {
+    backgroundColor: '#2ec4b6',
+    borderColor: '#2ec4b6',
+  },
+  hourButtonText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  hourButtonTextSelected: {
+    color: '#fff',
   },
 });
 
