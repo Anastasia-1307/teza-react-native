@@ -281,6 +281,10 @@ export default function LoginPage() {
                 if (response.ok) {
                     const data = await response.json();
                     if (data.reason !== 'admin_user_not_allowed') {
+                        if (data.has_persistent_token === false) {
+                            setError('Token-ul de autentificare biometrică a expirat. Vă rugăm să vă autentificați folosind parola.');
+                            return;
+                        }
                         targetUsername = user;
                         console.log('Found valid user for biometric auth:', user);
                         break;
@@ -409,7 +413,14 @@ const performBiometricLogin = async (targetUsername: string) => {
             console.log('Tokens stored - Access:', accessToken ? 'YES' : 'NO', 'Refresh:', refreshToken ? 'YES' : 'NO');
             router.replace(redirectPath);
         } else {
-            setError(data.detail || "Eroare la autentificare");
+            // Check if error is due to expired persistent token
+            if (data.detail && data.detail.includes('persistent') || 
+                data.detail && data.detail.includes('expirat') ||
+                data.detail && data.detail.includes('expired')) {
+                setError('Token-ul de autentificare biometrică a expirat. Vă rugăm să vă autentificați folosind parola.');
+            } else {
+                setError(data.detail || "Eroare la autentificare");
+            }
         }
 
     } catch (error) {
