@@ -462,7 +462,7 @@ export default function AddPassword() {
                 onPress={() => togglePasswordVisibility(password.id)}
               >
                 <Ionicons
-                  name={visiblePasswords.has(password.id) ? "eye-off" : "eye"}
+                  name={visiblePasswords.has(password.id) ? "eye" : "eye-off"}
                   size={20}
                   color="#666"
                 />
