@@ -2,8 +2,6 @@ import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useState } from 'react';
 import { Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // @ts-ignore - NetworkConfig is JS file
-import { BiometricStorage } from '../utils/BiometricStorage';
-import { Logger } from '../utils/Logger';
 import { NetworkConfig } from '../utils/NetworkConfig';
 
 interface User {
@@ -69,10 +67,6 @@ export default function AdminUsers() {
 
   const updateUserRole = async (userId: string, newRole: string) => {
     try {
-      // Gase utilizatorul curent pentru a obtine username
-      const currentUser = users.find(user => user.id === userId);
-      const username = currentUser?.username;
-      
       const token = await SecureStore.getItemAsync('access_token');
       const baseUrl = await NetworkConfig.getBaseUrl();
       const response = await fetch(`${baseUrl}/users/${userId}/role`, {
@@ -97,23 +91,6 @@ export default function AdminUsers() {
           console.error('Non-JSON response from server in AdminUsers update:', text);
         }
         
-        // Daca utilizatorul este promovat la admin, sterge datele biometrice
-        if (newRole === 'admin' && username) {
-          try {
-            console.log(`Deleting biometric data for ${username} - promoted to admin`);
-            await BiometricStorage.deleteBiometricData(username);
-            console.log(`Biometric data successfully deleted for ${username}`);
-            
-            // Notify server to revoke persistent refresh tokens
-            await Logger.logUserEvent(username, 'disable_bio_auth', {
-              bio_method: 'aes_key',
-              timestamp: new Date().toISOString()
-            });
-          } catch (bioError) {
-            console.error('Error deleting biometric data:', bioError);
-            // Continuam chiar daca stergerea datelor biometrice esueaza
-          }
-        }
         
         Alert.alert('Succes', responseData.message || 'Rolul utilizatorului a fost actualizat. Utilizatorul trebuie să se reautentifice pentru a vedea modificările.');
         fetchUsers();
